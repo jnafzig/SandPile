@@ -216,7 +216,7 @@ void draw(pile &sandpile, int N) {
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0) sdlError("SDL_Init");
 
-  window = SDL_CreateWindow("SDL 2 test",
+  window = SDL_CreateWindow("Sand Piles",
                             0, 0,
                             2 * N - 1, 2 * N - 1,
                             SDL_WINDOW_SHOWN);
