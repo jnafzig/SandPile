@@ -1,145 +1,9 @@
-#include <SDL.h>
-#include <emscripten.h>
-#include <vector>
-#include <set>
-#include <cmath>
+//#include <emscripten.h>
+#include <SDL2/SDL.h>
+#include "pile.h"
 
 #include <iostream>
 #include <chrono>
-
-struct node;
-struct connection;
-struct pile;
-
-struct link {
-  node* linkToNode;
-  long linkWeight;
-  link(node* nodePtr, int linkWeight);
-  long spill(long spillover);
-};
-
-struct node {
-  long height = 0;
-  long heightLimit = 4;
-  std::vector<link> links;
-  bool spill();
-  bool spillChain();
-};
-
-struct pile {
-  std::vector<node*> nodes;
-  node* sinknodePtr;
-  pile(int N);
-  ~pile();
-  void makeLink(int node1, int node2, int linkWeight);
-  void stabilizeWithChaining();
-  void stabilizeWithSet();
-  void stabilize();
-};
-
-long link::spill(long spillover) {
-  return linkToNode->height += spillover * linkWeight;
-}
-
-
-link::link(node* nodePtr, int weight) {
-  linkToNode = nodePtr;
-  linkWeight =  weight;
-}
-
-bool node::spill() {
-  if (height < heightLimit) return false;
-  int spillover = height / heightLimit;
-  height = height % heightLimit;
-  for (auto &x : links) x.spill(spillover);
-  return true;
-}
-
-bool node::spillChain() {
-  if (height < heightLimit) return false;
-  node* nodePtr = this;
-  int spillover;
-  do {
-    spillover = nodePtr->height / nodePtr->heightLimit;
-    //std::cout << spillover << " ";
-    nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-    for (auto &x : nodePtr->links) {
-      if (x.spill(spillover) > nodePtr->height) nodePtr = x.linkToNode;
-    }
-  } while (nodePtr->height >= nodePtr->heightLimit);
-  return true;
-}
-
-void pile::makeLink(int node1, int node2, int linkWeight) {
-  if (node2 < 0) {
-    nodes[node1]->links.push_back(link(sinknodePtr,linkWeight));
-  } else {
-    nodes[node1]->links.push_back(link(nodes[node2],linkWeight));
-  }
-}
-
-pile::pile(int N) : nodes(N) {
-  for (auto &nodePtr : nodes) {
-    nodePtr = new node;
-  }
-  sinknodePtr = new node;
-}
-
-pile::~pile() {
-  for (auto &nodePtr : nodes) {
-    delete nodePtr;
-  }
-  delete sinknodePtr;
-}
-
-void pile::stabilize() {
-  bool done = false;
-  while (!done) {
-    done = true;
-    for (auto &x : nodes) {
-      done &= !x->spill();
-    }
-  }
-}
-
-void pile::stabilizeWithSet() {
-  std::set<node*> toTopple;
-  node* nodePtr;
-  int spillover;
-  toTopple.insert(nodes[0]);
-  while (!toTopple.empty()) {
-    nodePtr = (*toTopple.begin());
-    toTopple.erase(toTopple.begin());
-    spillover = nodePtr->height / nodePtr->heightLimit;
-    nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-    for (auto &x : nodePtr->links) {
-      if (x.spill(spillover) >= nodePtr->heightLimit) {
-        toTopple.insert(x.linkToNode);
-      }
-    }
-  }
-}
-
-void pile::stabilizeWithChaining() {
-  bool done = false;
-  int spillover;
-  while (!done) {
-    done = true;
-    for (auto nodePtr : nodes) {
-      if (nodePtr->height >= nodePtr->heightLimit) {
-        done = false;
-        do {
-          spillover = nodePtr->height / nodePtr->heightLimit;
-          //std::cout << spillover << " ";
-          nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-          for (auto &x : nodePtr->links) {
-            if (x.spill(spillover) > nodePtr->height) nodePtr = x.linkToNode;
-          }
-        } while (nodePtr->height >= nodePtr->heightLimit);
-      }
-    }
-  }
-}
 
 int colIndex(int index) {
   return ((int) sqrt(8 * index + 1) -1) / 2;
@@ -205,8 +69,9 @@ void printPile(pile &sandpile) {
 
 static void sdlError(const char *str)
 {
+  std::cout <<  "Error at " << str << ": " << SDL_GetError() << std::endl;
     fprintf(stderr, "Error at %s: %s\n", str, SDL_GetError());
-    emscripten_force_exit(1);
+  //  emscripten_force_exit(1);
 }
 
 void draw(pile &sandpile, int N) {
@@ -217,67 +82,67 @@ void draw(pile &sandpile, int N) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) sdlError("SDL_Init");
 
   window = SDL_CreateWindow("Sand Piles",
-                            0, 0,
+                            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                             2 * N - 1, 2 * N - 1,
                             SDL_WINDOW_SHOWN);
   if (window == NULL) sdlError("SDL_CreateWindow");
   surface = SDL_GetWindowSurface(window);
   if (surface == NULL) sdlError("SDL_GetWindowSurface");
 
-    int x, y, z;
+  int x, y, z;
 
-    if (SDL_MUSTLOCK(surface)) {
-        if (SDL_LockSurface(surface) != 0) sdlError("SDL_LockSurface");
-    }
+  if (SDL_MUSTLOCK(surface)) {
+      if (SDL_LockSurface(surface) != 0) sdlError("SDL_LockSurface");
+  }
 
-    for (y = -N + 1; y < N; y++) {
-        Uint32 *p = (Uint32 *)(((Uint8 *)surface->pixels) +
-                               surface->pitch * (y+N-1));
-        for (x = -N + 1; x < N; x++) {
-          if (abs(x) <= abs(y)) {
-            z = sandpile.nodes[triangleNum(abs(y)) + abs(x)]->height;
-          } else {
-            z = sandpile.nodes[triangleNum(abs(x)) + abs(y)]->height;
-          }
-
-          switch(z) {
-            case 0:
-              *(p++) = SDL_MapRGB(surface->format, 255, 255, 255);
-              break;
-            case 1:
-              *(p++) = SDL_MapRGB(surface->format, 0, 150, 230);
-              break;
-            case 2:
-              *(p++) = SDL_MapRGB(surface->format, 250, 200, 0);
-              break;
-            case 3:
-              *(p++) = SDL_MapRGB(surface->format, 178, 40, 100);
-              break;
-            default:
-              std::cout << "missed values " << z << " at x: " << x << " and y: " << y << std::endl;
-          }
+  for (y = -N + 1; y < N; y++) {
+      Uint32 *p = (Uint32 *)(((Uint8 *)surface->pixels) +
+                             surface->pitch * (y+N-1));
+      for (x = -N + 1; x < N; x++) {
+        if (abs(x) <= abs(y)) {
+          z = sandpile.nodes[triangleNum(abs(y)) + abs(x)]->height;
+        } else {
+          z = sandpile.nodes[triangleNum(abs(x)) + abs(y)]->height;
         }
-    }
+
+        switch(z) {
+          case 0:
+            *(p++) = SDL_MapRGB(surface->format, 255, 255, 255);
+            break;
+          case 1:
+            *(p++) = SDL_MapRGB(surface->format, 0, 150, 230);
+            break;
+          case 2:
+            *(p++) = SDL_MapRGB(surface->format, 250, 200, 0);
+            break;
+          case 3:
+            *(p++) = SDL_MapRGB(surface->format, 178, 40, 100);
+            break;
+          default:
+            std::cout << "missed values " << z << " at x: " << x << " and y: " << y << std::endl;
+        }
+      }
+  }
+
+  if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
+  if (SDL_UpdateWindowSurface(window) != 0)
+      sdlError("SDL_UpdateWindowSurface");
 
 
-    if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
-    if (SDL_UpdateWindowSurface(window) != 0)
-        sdlError("SDL_UpdateWindowSurface");
+  SDL_SaveBMP(surface, "out.bmp");
+  //Wait two seconds
+  SDL_Delay( 2000 );
+
+  //Destroy window
+  SDL_DestroyWindow( window );
+  //Quit SDL subsystems
+  SDL_Quit();
 }
 
+void makeSymmetricPile(pile &sandpile, int width, long numGrains) {
 
-
-int main(void) {
-
-  using namespace std::chrono;
-
-
-  high_resolution_clock::time_point t1 = high_resolution_clock::now();
-
-  int N = 150;
-  int triNum = triangleNum(N);
-  int previousTriNum = triangleNum(N-1);
-  pile sandpile(triNum);
+  int triNum = triangleNum(width);
+  int previousTriNum = triangleNum(width-1);
   for (int i = 0; i < previousTriNum; i++) {
     if (upIndex(i) >= 0) sandpile.makeLink(i, upIndex(i), upWeight(i));
     if (leftIndex(i) >= 0) sandpile.makeLink(i, leftIndex(i), leftWeight(i));
@@ -291,7 +156,20 @@ int main(void) {
     sandpile.makeLink(i, -1, 4); // send right link into sink
   }
 
-  sandpile.nodes[0]->height = (long) pow(2,17);
+  sandpile.nodes[0]->height = numGrains;
+}
+
+int main(void) {
+
+  using namespace std::chrono;
+
+  high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
+  int width = 150;
+  long numGrains = pow(2,17);
+  int triNum = triangleNum(width);
+  pile sandpile(triNum);
+  makeSymmetricPile(sandpile, width, numGrains);
 
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
@@ -320,7 +198,7 @@ int main(void) {
 
   t1 = high_resolution_clock::now();
 
-  draw(sandpile, N);
+  draw(sandpile, width);
 
   t2 = high_resolution_clock::now();
   time_span = duration_cast<duration<double>>(t2 - t1);
