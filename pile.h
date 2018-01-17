@@ -25,13 +25,11 @@ struct node {
 };
 
 struct pile {
-  std::vector<node*> nodes;
-  node* sinknodePtr;
+  std::vector<std::vector<node*>> nodes;
   pile(int N);
   ~pile();
-  void makeLink(int node1, int node2, int linkWeight);
+  void makeLink(int inode1, int jnode1, int inode2, int jnode2, int linkWeight);
   void stabilizeWithChaining();
-  void stabilizeWithSet();
   void stabilize();
 };
 
