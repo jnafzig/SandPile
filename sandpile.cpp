@@ -96,8 +96,8 @@ int main(void) {
 
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
-  int width = 150;
-  long numGrains = pow(2,17);
+  int width = 200;
+  long numGrains = pow(2,18);
   pile sandpile(width);
   sandpile.nodes[0][0]->height = numGrains;
 
@@ -110,7 +110,8 @@ int main(void) {
   std::cout << sandpile.nodes[0][0]->height << " grains of sand" << std::endl;
   t1 = high_resolution_clock::now();
 
-  sandpile.stabilizeWithChaining();
+  sandpile.stabilize();
+  //sandpile.stabilizeWithChaining();
 
   t2 = high_resolution_clock::now();
   time_span = duration_cast<duration<double>>(t2 - t1);

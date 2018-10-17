@@ -1,5 +1,5 @@
-#ifndef DANCINGLINKS_H
-#define DANCINGLINKS_H
+#ifndef PILE_H
+#define PILE_H
 
 #include <vector>
 #include <set>
@@ -21,7 +21,6 @@ struct node {
   long heightLimit = 4;
   std::vector<link> links;
   bool spill();
-  bool spillChain();
 };
 
 struct pile {
@@ -29,7 +28,6 @@ struct pile {
   pile(int N);
   ~pile();
   void makeLink(int inode1, int jnode1, int inode2, int jnode2, int linkWeight);
-  void stabilizeWithChaining();
   void stabilize();
 };
 

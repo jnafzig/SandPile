@@ -17,20 +17,6 @@ bool node::spill() {
   return true;
 }
 
-bool node::spillChain() {
-  if (height < heightLimit) return false;
-  node* nodePtr = this;
-  int spillover;
-  do {
-    spillover = nodePtr->height / nodePtr->heightLimit;
-    nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-    for (auto &x : nodePtr->links) {
-      if (x.spill(spillover) > nodePtr->height) nodePtr = x.linkToNode;
-    }
-  } while (nodePtr->height >= nodePtr->heightLimit);
-  return true;
-}
-
 void pile::makeLink(int inode1, int jnode1, int inode2, int jnode2, int linkWeight) {
   nodes[inode1][jnode1]->links.push_back(link(nodes[inode2][jnode2],linkWeight));
 }
@@ -108,24 +94,3 @@ void pile::stabilize() {
   }
 }
 
-void pile::stabilizeWithChaining() {
-  bool done = false;
-  int spillover;
-  while (!done) {
-    done = true;
-    for (auto &nodeVector : nodes) {
-      for (auto nodePtr : nodeVector) {
-        if (nodePtr->height >= nodePtr->heightLimit) {
-          done = false;
-          do {
-            spillover = nodePtr->height / nodePtr->heightLimit;
-            nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-            for (auto &link : nodePtr->links) {
-              if (link.spill(spillover) > nodePtr->height) nodePtr = link.linkToNode;
-            }
-          } while (nodePtr->height >= nodePtr->heightLimit);
-        }
-      }
-    }
-  }
-}
