@@ -2,9 +2,6 @@
 #define PILE_H
 
 #include <vector>
-#include <set>
-#include <cmath>
-
 
 struct node;
 struct pile;
@@ -29,6 +26,8 @@ struct pile {
   ~pile();
   void makeLink(int inode1, int jnode1, int inode2, int jnode2, int linkWeight);
   void stabilize();
+  void stabilize1();
+  void stabilize_stripes();
 };
 
 #endif

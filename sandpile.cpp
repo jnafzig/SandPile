@@ -5,7 +5,6 @@
 #include <iostream>
 #include <chrono>
 
-
 void printPile(pile &sandpile) {
   for (int i = 0; i < sandpile.nodes.size(); i++) {
     for (int j = 0; j <= i; j++) {
@@ -94,10 +93,12 @@ int main(void) {
 
   using namespace std::chrono;
 
+
+  int width = 600;
+  long numGrains = pow(2,21);
+  
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
-  int width = 200;
-  long numGrains = pow(2,18);
   pile sandpile(width);
   sandpile.nodes[0][0]->height = numGrains;
 
@@ -110,14 +111,12 @@ int main(void) {
   std::cout << sandpile.nodes[0][0]->height << " grains of sand" << std::endl;
   t1 = high_resolution_clock::now();
 
-  sandpile.stabilize();
-  //sandpile.stabilizeWithChaining();
+  sandpile.stabilize_stripes();
 
   t2 = high_resolution_clock::now();
   time_span = duration_cast<duration<double>>(t2 - t1);
 
   std::cout << "stabilization done.  Time elapsed: " << time_span.count() << std::endl;
-
 /*
   t1 = high_resolution_clock::now();
   printPile(sandpile);
@@ -125,9 +124,6 @@ int main(void) {
   time_span = duration_cast<duration<double>>(t2 - t1);
 
   std::cout << "printing done.  Time elapsed: " << time_span.count() << std::endl;
-*/
-
-
   t1 = high_resolution_clock::now();
 
   draw(sandpile, width);
@@ -136,6 +132,5 @@ int main(void) {
   time_span = duration_cast<duration<double>>(t2 - t1);
 
   std::cout << "painting done.  Time elapsed: " << time_span.count() << std::endl;
-
-
+*/
 }
