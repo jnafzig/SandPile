@@ -1,131 +1,232 @@
 #include "pile.h"
+#include <iostream>
+#include <future>
+#include <mutex>
+#include <chrono>
 
-long link::spill(long spillover) {
-  return linkToNode->height += spillover * linkWeight;
-}
-
-link::link(node* nodePtr, int weight) {
-  linkToNode = nodePtr;
-  linkWeight =  weight;
-}
-
-bool node::spill() {
-  if (height < heightLimit) return false;
-  int spillover = height / heightLimit;
-  height = height % heightLimit;
-  for (auto &x : links) x.spill(spillover);
-  return true;
-}
-
-bool node::spillChain() {
-  if (height < heightLimit) return false;
-  node* nodePtr = this;
-  int spillover;
-  do {
-    spillover = nodePtr->height / nodePtr->heightLimit;
-    nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-    for (auto &x : nodePtr->links) {
-      if (x.spill(spillover) > nodePtr->height) nodePtr = x.linkToNode;
-    }
-  } while (nodePtr->height >= nodePtr->heightLimit);
-  return true;
-}
-
-void pile::makeLink(int inode1, int jnode1, int inode2, int jnode2, int linkWeight) {
-  nodes[inode1][jnode1]->links.push_back(link(nodes[inode2][jnode2],linkWeight));
-}
 
 pile::pile(int N) {
-  nodes.resize(N);
-  for (int i = 0; i < nodes.size(); i++) {
-    nodes[i].resize(i+1);
-    for (int j = 0; j < nodes[i].size(); j++) {
-      nodes[i][j] = new node;
+    N = std::max(N, 2);
+    nodes.resize(N);
+    j_range.resize(N);
+    i_range = N-1;
+    for (int i = 0; i < nodes.size(); i++) {
+        nodes[i].resize(N);
+        j_range[i] = 2;
+        for (int j = 0; j < nodes[i].size(); j++) {
+            nodes[i][j] = 0;
+        }
     }
-  }
-
-  // right links
-  for (int i = 0; i < N - 1; i++) {
-    for (int j = 0; j <= i; j++) {
-      makeLink(i, j, i + 1, j, 1);
-    }
-  }
-
-  // left links
-  for (int i = 1; i < N - 1; i++) {
-    for (int j = 0; j < i; j++) {
-      if (i == 1 & j == 0) {
-        makeLink(i, j, i - 1, j, 4);
-      } else if (j == i - 1) {
-        makeLink(i, j, i - 1, j, 2);
-      } else {
-        makeLink(i, j, i - 1, j, 1);
-      }
-    }
-  }
-
-  // up links
-  for (int i = 1; i < N - 1; i++) {
-    for (int j = 0; j < i; j++) {
-      if (j == i - 1) {
-        makeLink(i, j, i, j + 1, 2);
-      } else {
-        makeLink(i, j, i, j + 1, 1);
-      }
-    }
-  }
-
-  // down links
-  for (int i = 1; i < N - 1; i++) {
-    for (int j = 1; j <= i; j++) {
-      if (j == 1) {
-        makeLink(i, j, i, j - 1, 2);
-      } else {
-        makeLink(i, j, i, j - 1, 1);
-      }
-    }
-  }
-
 }
 
-pile::~pile() {
-  for (int i = 0; i < nodes.size(); i++) {
-    for (int j = 0; j < nodes[i].size(); j++) {
-      delete nodes[i][j];
+
+bool pile::stabilize_grid(std::vector<std::mutex> &column_guard) {
+    bool done = true;
+    unsigned int spillover;
+    // i = 0 column
+    int i = 0;
+    int j = 0;
+    column_guard[0].lock();
+    column_guard[1].lock();
+    if (nodes[i][j] >= 4) {
+        done = false;
+        spillover = nodes[i][j] / 4;
+        nodes[i][j] = nodes[i][j] % 4;
+        // spills
+        nodes[i+1][j] += spillover;
     }
-  }
+    j = 1;
+    if (nodes[i][j] >= 4) {
+        done = false;
+        spillover = nodes[i][j] / 4;
+        nodes[i][j] = nodes[i][j] % 4;
+        // spills
+        nodes[i+1][j] += spillover;
+        nodes[i+1][j-1] += 2*spillover;
+    }
+    for (j = 2; j < j_range[i]; j++) {
+        if (nodes[i][j] >= 4) {
+            done = false;
+            spillover = nodes[i][j] / 4;
+            nodes[i][j] = nodes[i][j] % 4;
+            // spills
+            nodes[i+1][j-1] += spillover;
+            nodes[i+1][j] += spillover;
+        }
+    }
+    // check to expand j_range
+    if (nodes[i][j_range[i]] >= 4 and j_range[i] < nodes[i].size() - 1) {
+        j = j_range[i]++;
+        done = false;
+        spillover = nodes[i][j] / 4;
+        nodes[i][j] = nodes[i][j] % 4;
+        // spills
+        nodes[i+1][j-1] += spillover;
+        nodes[i+1][j] += spillover;
+    }
+    // i = 1 column
+    i = 1;
+    j = 0;
+    column_guard[2].lock();
+    if (nodes[i][j] >= 4) {
+        done = false;
+        spillover = nodes[i][j] / 4;
+        nodes[i][j] = nodes[i][j] % 4;
+        // spills
+        nodes[i+1][j] += spillover;
+        nodes[i-1][j] += 4*spillover;
+        nodes[i-1][j+1] += 2*spillover;
+    }
+    j = 1;
+    if (nodes[i][j] >= 4) {
+        done = false;
+        spillover = nodes[i][j] / 4;
+        nodes[i][j] = nodes[i][j] % 4;
+        // spills
+        nodes[i+1][j] += spillover;
+        nodes[i-1][j] += 2*spillover;
+        nodes[i-1][j+1] += 2*spillover;
+        nodes[i+1][j-1] += 2*spillover;
+    }
+    for (j = 2; j < j_range[i]; j++) {
+        if (nodes[i][j] >= 4) {
+            done = false;
+            spillover = nodes[i][j] / 4;
+            nodes[i][j] = nodes[i][j] % 4;
+            // spills
+            nodes[i+1][j-1] += spillover;
+            nodes[i+1][j] += spillover;
+            nodes[i-1][j+1] += 2*spillover;
+            nodes[i-1][j] += 2*spillover;
+        }
+    }
+    // check to expand j_range
+    if (nodes[i][j_range[i]] >= 4 and j_range[i] < nodes[i].size() - 1) {
+        j = j_range[i]++;
+        done = false;
+        spillover = nodes[i][j] / 4;
+        nodes[i][j] = nodes[i][j] % 4;
+        // spills
+        nodes[i+1][j-1] += spillover;
+        nodes[i+1][j] += spillover;
+        nodes[i-1][j+1] += 2*spillover;
+        nodes[i-1][j] += 2*spillover;
+    }
+    // bulk
+    for (i = 2; i < i_range; i++) {
+        // bottom edge
+        j = 0;
+        column_guard[i-2].unlock();
+        if (i+1 < i_range) {
+            column_guard[i+1].lock();
+        }
+        if (nodes[i][j] >= 4) {
+            done = false;
+            spillover = nodes[i][j] / 4;
+            nodes[i][j] = nodes[i][j] % 4;
+            // spills
+            nodes[i-1][j+1] += spillover;
+            nodes[i+1][j] += spillover;
+            nodes[i-1][j] += spillover;
+        }
+        j = 1;
+        if (nodes[i][j] >= 4) {
+            done = false;
+            spillover = nodes[i][j] / 4;
+            nodes[i][j] = nodes[i][j] % 4;
+            // spills
+            nodes[i-1][j+1] += spillover;
+            nodes[i+1][j-1] += 2*spillover;
+            nodes[i+1][j] += spillover;
+            nodes[i-1][j] += spillover;
+        }
+        for (j = 2; j < j_range[i]; j++) {
+            if (nodes[i][j] >= 4) {
+                done = false;
+                spillover = nodes[i][j] / 4;
+                nodes[i][j] = nodes[i][j] % 4;
+                // spills
+                nodes[i-1][j+1] += spillover;
+                nodes[i+1][j-1] += spillover;
+                nodes[i+1][j] += spillover;
+                nodes[i-1][j] += spillover;
+            }
+        }
+        // check to expand j_range
+        if (nodes[i][j_range[i]] >= 4 and j_range[i] < nodes[i].size() - 1) {
+            j = j_range[i]++;
+            done = false;
+            spillover = nodes[i][j] / 4;
+            nodes[i][j] = nodes[i][j] % 4;
+            // spills
+            nodes[i-1][j+1] += spillover;
+            nodes[i+1][j-1] += spillover;
+            nodes[i+1][j] += spillover;
+            nodes[i-1][j] += spillover;
+        }
+    }
+    column_guard[i_range-2].unlock();
+    column_guard[i_range-1].unlock();
+    return done;
+}
+
+int pile::worker(std::vector<std::mutex> &column_guard) {
+    bool done = false;
+    int count = 0;
+    while (not done) {
+        done = stabilize_grid(std::ref(column_guard));
+        count++;
+    }
+    return count;
+}
+
+int pile::check_grid(std::vector<std::mutex> &column_guard) {
+    int max_height = 0;
+    int n_squares = 0;
+    column_guard[0].lock();
+    for (int i = 0; i < nodes.size(); i++) {
+        int max_j = 0;
+        for (int j = 0; j < nodes[i].size(); j++) {
+            if (nodes[i][j] > max_height) {
+                max_height = nodes[i][j];
+            }
+            if (nodes[i][j] > 0) {
+                max_j = j;
+            }
+        }
+        n_squares += max_j;
+        if (i+1 < column_guard.size()) {
+            column_guard[i+1].lock();
+        }
+        column_guard[i].unlock();
+    }
+    std::cout << "num squares " << n_squares << std::endl;
+    return max_height;
 }
 
 void pile::stabilize() {
-  bool done = false;
-  while (!done) {
-    done = true;
-    for (auto &nodeVector : nodes) {
-      for (auto &nodePtr : nodeVector) {
-        done &= !nodePtr->spill();
-      }
+    int num_threads(4);
+    std::vector<std::future<int>> futures;
+    std::vector<std::mutex> column_guard(nodes.size());
+    for (int i = 0; i < num_threads; i++) {
+        futures.push_back(std::async(&pile::worker, this, 
+                          std::ref(column_guard)));
     }
-  }
+
+    std::future_status status;
+    do {
+        status = futures[0].wait_for(std::chrono::milliseconds(200));
+        if (status == std::future_status::timeout) {
+            std::cout << check_grid(std::ref(column_guard)) << std::endl;
+        } else if (status == std::future_status::ready) {
+            std::cout << "ready!\n";
+        }
+    } while (status != std::future_status::ready); 
+
+    int num_iterations = 0;
+    for (auto &future: futures) {
+        num_iterations += future.get();
+    }
+    std::cout << num_iterations << " total iterations" << std::endl;
 }
 
-void pile::stabilizeWithChaining() {
-  bool done = false;
-  int spillover;
-  while (!done) {
-    done = true;
-    for (auto &nodeVector : nodes) {
-      for (auto nodePtr : nodeVector) {
-        if (nodePtr->height >= nodePtr->heightLimit) {
-          done = false;
-          do {
-            spillover = nodePtr->height / nodePtr->heightLimit;
-            nodePtr->height = nodePtr->height % nodePtr->heightLimit;
-            for (auto &link : nodePtr->links) {
-              if (link.spill(spillover) > nodePtr->height) nodePtr = link.linkToNode;
-            }
-          } while (nodePtr->height >= nodePtr->heightLimit);
-        }
-      }
-    }
-  }
-}
