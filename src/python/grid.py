@@ -5,11 +5,10 @@ from functools import reduce
 import matplotlib.pyplot as plt
 
 from scipy.special import gamma
-from scipy.sparse import diags, eye, kron, coo_array, lil_array, bmat
+from scipy.sparse import diags, eye, kron, coo_array, lil_array, bmat, csr_array
 from scipy.sparse.linalg import spsolve
 from functools import cached_property
 import scipy.optimize
-import cProfile
 
 class RectGrid:
     '''
@@ -161,7 +160,6 @@ class RectGrid:
                 np.max(self.x)
             )
         )
-        plt.show()
 
     def _plot_3d(self, array, slice=False):
         if slice:
@@ -175,7 +173,6 @@ class RectGrid:
                     np.max(self.x)
                 )
             )
-            plt.show()
             return
         voxelarray = self.unflatten(array)
         voxelarray[self.unflatten(self.X[2]) > 0] = 0
@@ -191,7 +188,6 @@ class RectGrid:
             facecolors=colors,
             edgecolor=None,
         )
-        plt.show()
 
     def plot(self, array, **kwargs):
         if self.n_dimensions == 2:
@@ -201,26 +197,66 @@ class RectGrid:
         else:
             raise NotImplementedError
 
-def stabilize(pile, laplacian, degree=4, initial_spills=None, completion_check=1):
-    n = int(np.sqrt(laplacian.shape[0]))
-    if initial_spills is None:
-        spills = 0 * pile
-    else:
-        spills = initial_spills.copy()
-    i = 0
-    while True:
-        spillover = laplacian @ spills
-        topple = (spillover + pile) // degree
-        spills = spills + topple
-        i += 1
-        if i % completion_check == 0:
-            if np.any(topple):
-                i += 1
-            else:
-                break
-    print('iterations', i)
+def duplicate_non_ones(mat):
+    data = np.ones(np.sum(mat.data), dtype=mat.data.dtype)
+    indices = np.repeat(mat.indices, mat.data)
+    indptr = np.cumsum(np.sum(np.pad(mat.toarray(), pad_width=(1,0)), axis=0))
+    return csr_array((data, indices, indptr), mat.shape)
 
-    return spillover + pile, spills
+from itertools import chain
+use_cython = True
+if use_cython:
+    from stabilize import _stabilize
+    def stabilize(pile, laplacian, degree=4, initial_spills=None, completion_check=1):
+        laplacian = laplacian.tocsc()
+        laplacian.setdiag(0, k=0)
+        laplacian.eliminate_zeros()
+        print(sum(laplacian.data > 1) / len(laplacian.data), 'fraction non one elements in data')
+        #laplacian = duplicate_non_ones(laplacian)
+        print(sum(laplacian.data > 1) / len(laplacian.data), 'fraction non one elements in data')
+        print('indices')
+        dtype = np.uint16
+        print(np.iinfo(dtype).max)
+        print(np.max(laplacian.indices))
+        assert np.max(laplacian.indices) < np.iinfo(dtype).max
+        laplacian.indices = laplacian.indices.astype(dtype)
+        print('indptr')
+        dtype = np.int32
+        print(np.iinfo(dtype).max)
+        print(np.max(laplacian.indptr))
+        dptr = np.diff(laplacian.indptr)
+        print('max diff', max(dptr))
+        print('slice', laplacian[2,:])
+        print('slice nz', laplacian[2,:].nonzero()[1]-2)
+        dist = list(chain(*[laplacian[i,:].nonzero()[1]-i for i in range(laplacian.shape[0])]))
+        print('max', max(dist))
+        print('min', min(dist))
+        assert np.max(laplacian.indptr) < np.iinfo(dtype).max
+        laplacian.indptr = laplacian.indptr.astype(dtype)
+        #_stabilize(pile, laplacian.data, laplacian.indices.astype(np.uint16), laplacian.indptr.astype(np.uint16))
+        _stabilize(pile, laplacian.data, laplacian.indices, laplacian.indptr)
+        return pile, 0*pile
+else:
+    def stabilize(pile, laplacian, degree=4, initial_spills=None, completion_check=1):
+        if initial_spills is None:
+            spills = 0 * pile
+        else:
+            spills = initial_spills.copy()
+        i = 0
+        while True:
+            spillover = laplacian @ spills
+            topple = (spillover + pile) // degree
+            spills = spills + topple
+            i += 1
+            if i % completion_check == 0:
+                if np.any(topple):
+                    i += 1
+                else:
+                    break
+        print('iterations', i)
+
+        return spillover + pile, spills
+
 
 def unit_n_ball_volume(n_dimensions):
     return np.pi ** (n_dimensions / 2) / gamma(n_dimensions / 2 + 1)
@@ -291,10 +327,16 @@ def sandpile(
             else:
                 print(i, 'negative toppling rounds')
                 break
-    
+        pile += spillover
+   
+    pile = pile.astype(np.int8)
     print('format', laplacian.format)
     print('pile dtype', pile.dtype)
     print('laplacian dtype', laplacian.dtype)
+    print('pile height', np.max(pile))
+
+    
+    t_stabilize = time.time()
     pile, spills = stabilize(
         pile,
         laplacian,
@@ -302,6 +344,7 @@ def sandpile(
         degree=degree,
         completion_check=completion_check
     )
+    print('stabilization alone took', time.time()-t_stabilize)
 
     if use_symmetry:
         pile = expand @ pile
@@ -313,18 +356,17 @@ def sandpile(
     print('num spills', np.sum(spills))
     print('avg density', np.sum(pile[spills>0]) / np.sum(spills>0))
 
-    grid.plot(pile, slice=True),
+    grid.plot(pile, slice=True)
     plt.show()
 
 
 
 if __name__ == "__main__":
-    import cProfile
     sandpile(
-        2**25,
-        n_dimensions=3,
+        2**18,
+        n_dimensions=2,
         use_symmetry=True,
-        initial_guess=False,
+        initial_guess=True,
         density0=3,
         density1=3,
         completion_check=100
