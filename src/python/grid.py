@@ -214,27 +214,13 @@ if use_cython:
         print(sum(laplacian.data > 1) / len(laplacian.data), 'fraction non one elements in data')
         #laplacian = duplicate_non_ones(laplacian)
         print(sum(laplacian.data > 1) / len(laplacian.data), 'fraction non one elements in data')
-        print('indices')
-        dtype = np.uint16
-        print(np.iinfo(dtype).max)
-        print(np.max(laplacian.indices))
-        assert np.max(laplacian.indices) < np.iinfo(dtype).max
-        laplacian.indices = laplacian.indices.astype(dtype)
-        print('indptr')
-        dtype = np.int32
-        print(np.iinfo(dtype).max)
-        print(np.max(laplacian.indptr))
-        dptr = np.diff(laplacian.indptr)
-        print('max diff', max(dptr))
-        print('slice', laplacian[2,:])
-        print('slice nz', laplacian[2,:].nonzero()[1]-2)
-        dist = list(chain(*[laplacian[i,:].nonzero()[1]-i for i in range(laplacian.shape[0])]))
-        print('max', max(dist))
-        print('min', min(dist))
-        assert np.max(laplacian.indptr) < np.iinfo(dtype).max
-        laplacian.indptr = laplacian.indptr.astype(dtype)
-        #_stabilize(pile, laplacian.data, laplacian.indices.astype(np.uint16), laplacian.indptr.astype(np.uint16))
-        _stabilize(pile, laplacian.data, laplacian.indices, laplacian.indptr)
+        t0 = time.time()
+        iterations = _stabilize(pile, laplacian.data, laplacian.indices, laplacian.indptr)
+        t1 = time.time()
+        print('stabilization alone took', t1-t0)
+        print(iterations, 'iterations')
+        print((t1-t0)/iterations, 's per iteration')
+        print((t1-t0)/iterations/len(pile), 's per inner loop executions')
         return pile, 0*pile
 else:
     def stabilize(pile, laplacian, degree=4, initial_spills=None, completion_check=1):
@@ -336,7 +322,6 @@ def sandpile(
     print('pile height', np.max(pile))
 
     
-    t_stabilize = time.time()
     pile, spills = stabilize(
         pile,
         laplacian,
@@ -344,7 +329,6 @@ def sandpile(
         degree=degree,
         completion_check=completion_check
     )
-    print('stabilization alone took', time.time()-t_stabilize)
 
     if use_symmetry:
         pile = expand @ pile
@@ -353,8 +337,6 @@ def sandpile(
     t1 = time.time()
     print('stabilization took', t1-t0)
     print('chip accounting', np.sum(pile) - N)
-    print('num spills', np.sum(spills))
-    print('avg density', np.sum(pile[spills>0]) / np.sum(spills>0))
 
     grid.plot(pile, slice=True)
     plt.show()

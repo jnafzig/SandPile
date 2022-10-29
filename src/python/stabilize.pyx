@@ -9,7 +9,7 @@ cimport cython
 def _stabilize(
     np.int8_t[::1] pile,
     np.int8_t[::1] data,
-    np.uint16_t[::1] indices,
+    np.int32_t[::1] indices,
     np.int32_t[::1] indptr,
 ):
     cdef Py_ssize_t i, j = 0
@@ -22,10 +22,11 @@ def _stabilize(
         iterations += 1
         for i in range(indptr.shape[0]-1):
             if pile[i] >= 4:
-                spill = pile[i] / 4
-                pile[i] = pile[i] % 4
+                spill = pile[i] >> 2
+                pile[i] = pile[i] & 3
                 for j in range(indptr[i], indptr[i+1]):
                     pile[indices[j]] += spill * data[j]
                 done = 0
+    return iterations
 
 
